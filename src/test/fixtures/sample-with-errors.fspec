@@ -1,0 +1,36 @@
+// Sample Fault file with intentional syntax errors for linting demonstration
+spec OrderProcessingWithErrors
+
+import "payment.fspec"
+
+const MAX_RETRIES = 3  // Missing semicolon
+const TIMEOUT = "30s";
+
+def OrderFlow = flow {
+    status: "pending",
+    retries: 0,  // Could suggest int(0)
+    amount: 0.0, // Could suggest float(0.0)
+    processOrder: func {
+        if this.retries < MAX_RETRIES then {
+            this.status = "processing"  // Missing semicolon
+            this.retries++  // Missing semicolon
+        } else {
+            this.status = "failed";
+        }
+    }
+}  // Missing semicolon
+
+// Invalid flow assignment - should use -> instead of =
+orderTotal = payment.amount  // Missing semicolon and wrong operator
+
+// Valid flow assignment
+payment.amount -> orderTotal;
+
+// Valid assertions
+assert order.status == "completed" eventually;
+assume payment.verified == true always;
+
+// Test string and numeric literals
+message = "Order complete";
+hexValue = 0xFF;
+floatValue = 3.14159;
