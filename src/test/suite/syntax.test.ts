@@ -44,7 +44,7 @@ suite('Syntax Highlighting Test Suite', () => {
         
         const text = document.getText();
         assert.ok(text.includes('// Sample Fault specification'));
-        assert.ok(text.includes('/* Test various operators'));
+        assert.ok(text.includes('// Test various operators'));
     });
 
     test('Should handle string literals', async () => {

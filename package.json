@@ -44,26 +44,90 @@
         "scopeName": "source.fault",
         "path": "./syntaxes/fault.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "fault.refreshLinting",
+        "title": "Refresh Linting",
+        "category": "Fault"
+      },
+      {
+        "command": "fault.clearDiagnostics",
+        "title": "Clear Diagnostics",
+        "category": "Fault"
+      }
+    ],
+    "configuration": {
+      "title": "Fault Linter",
+      "properties": {
+        "fault-linter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Fault language linting"
+        },
+        "fault-linter.rules.missing-semicolon": {
+          "type": "string",
+          "enum": ["error", "warning", "info", "off"],
+          "default": "error",
+          "description": "Severity level for missing semicolon rule"
+        },
+        "fault-linter.rules.invalid-flow-assignment": {
+          "type": "string",
+          "enum": ["error", "warning", "info", "off"],
+          "default": "error",
+          "description": "Severity level for invalid flow assignment rule"
+        },
+        "fault-linter.rules.undefined-variable": {
+          "type": "string",
+          "enum": ["error", "warning", "info", "off"],
+          "default": "warning",
+          "description": "Severity level for undefined variable rule"
+        },
+        "fault-linter.rules.missing-type-annotation": {
+          "type": "string",
+          "enum": ["error", "warning", "info", "off"],
+          "default": "info",
+          "description": "Severity level for missing type annotation rule"
+        },
+        "fault-linter.rules.deprecated-syntax": {
+          "type": "string",
+          "enum": ["error", "warning", "info", "off"],
+          "default": "warning",
+          "description": "Severity level for deprecated syntax rule"
+        },
+        "fault-linter.debounceTime": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "maximum": 5000,
+          "description": "Debounce time in milliseconds for linting on document changes"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run copy-fixtures",
     "watch": "tsc -watch -p ./",
+    "copy-fixtures": "mkdir -p out/test/fixtures && cp src/test/fixtures/* out/test/fixtures/",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.0"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
     "@types/mocha": "^10.0.1",
-    "@typescript-eslint/eslint-plugin": "^5.45.0",
-    "@typescript-eslint/parser": "^5.45.0",
+    "@typescript-eslint/eslint-plugin": "^8.14.0",
+    "@typescript-eslint/parser": "^8.14.0",
     "@vscode/test-electron": "^2.2.0",
-    "eslint": "^8.28.0",
-    "glob": "^8.0.3",
-    "mocha": "^10.1.0",
+    "eslint": "^9.15.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.8.2",
     "typescript": "^4.9.4"
   }
 }
