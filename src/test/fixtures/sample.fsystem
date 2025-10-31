@@ -1,0 +1,47 @@
+// Sample Fault system file for testing
+system PaymentSystem
+
+global timeout = 30
+global retries = 3
+
+component PaymentProcessor = states {
+    idle: func {
+        choose advance(payment.process) || stay();
+    },
+    processing: func {
+        if payment.amount > 0 then {
+            advance(payment.verify);
+        } else {
+            leave();
+        }
+    },
+    verified: func {
+        advance(payment.complete); 
+    }
+}
+
+component OrderManager = states {
+    pending: func {
+        when payment.verified then advance(order.fulfill)
+    },
+    fulfilling: func {
+        stay()
+    }
+}
+
+start {
+    PaymentProcessor: idle,
+    OrderManager: pending
+}
+
+for 100 init {
+    payment = new PaymentProcessor
+    order = new OrderManager
+} run {
+    payment.process | order.update
+    
+    if now > timeout then {
+        payment.cancel()
+        order.reject()
+    }
+}
