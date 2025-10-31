@@ -48,22 +48,27 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run copy-fixtures",
     "watch": "tsc -watch -p ./",
+    "copy-fixtures": "mkdir -p out/test/fixtures && cp src/test/fixtures/* out/test/fixtures/",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.0"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
     "@types/mocha": "^10.0.1",
-    "@typescript-eslint/eslint-plugin": "^5.45.0",
-    "@typescript-eslint/parser": "^5.45.0",
+    "@typescript-eslint/eslint-plugin": "^8.14.0",
+    "@typescript-eslint/parser": "^8.14.0",
     "@vscode/test-electron": "^2.2.0",
-    "eslint": "^8.28.0",
-    "glob": "^8.0.3",
-    "mocha": "^10.1.0",
+    "eslint": "^9.15.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.8.2",
     "typescript": "^4.9.4"
   }
 }

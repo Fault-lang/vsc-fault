@@ -14,15 +14,15 @@ suite('Grammar Test Suite', () => {
         const grammarPath = path.join(__dirname, '../../../syntaxes/fault.tmLanguage.json');
         const grammarContent = fs.readFileSync(grammarPath, 'utf8');
         
-        let grammar;
+        let grammar: any;
         assert.doesNotThrow(() => {
             grammar = JSON.parse(grammarContent);
         }, 'Grammar should be valid JSON');
 
-        assert.ok(grammar.name, 'Grammar should have a name');
-        assert.ok(grammar.scopeName, 'Grammar should have a scopeName');
-        assert.ok(grammar.patterns, 'Grammar should have patterns');
-        assert.ok(grammar.repository, 'Grammar should have a repository');
+        assert.ok(grammar?.name, 'Grammar should have a name');
+        assert.ok(grammar?.scopeName, 'Grammar should have a scopeName');
+        assert.ok(grammar?.patterns, 'Grammar should have patterns');
+        assert.ok(grammar?.repository, 'Grammar should have a repository');
     });
 
     test('Grammar should include all required patterns', () => {
@@ -55,7 +55,8 @@ suite('Grammar Test Suite', () => {
         const grammar = JSON.parse(grammarContent);
 
         const keywordPatterns = grammar.repository.keywords.patterns;
-        const keywordRegex = keywordPatterns[0].match;
+        // Combine all keyword regex patterns
+        const allKeywordRegex = keywordPatterns.map((pattern: any) => pattern.match).join('|');
         
         // Check for essential Fault keywords
         const essentialKeywords = [
@@ -65,7 +66,7 @@ suite('Grammar Test Suite', () => {
 
         essentialKeywords.forEach(keyword => {
             assert.ok(
-                keywordRegex.includes(keyword),
+                allKeywordRegex.includes(keyword),
                 `Keywords pattern should include '${keyword}'`
             );
         });
