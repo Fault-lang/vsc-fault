@@ -68,11 +68,12 @@ export class FaultLinter {
                 
                 const varName = match[1];
                 // Extended list of keywords and common identifiers to skip
-                const keywords = ['system', 'spec', 'component', 'def', 'const', 'if', 'else', 'then', 'when', 
+                const keywords = ['all', 'system', 'spec', 'component', 'def', 'const', 'if', 'else', 'then', 'when',
                                 'assert', 'assume', 'flow', 'stock', 'func', 'for', 'new', 'this', 'now',
                                 'true', 'false', 'nil', 'int', 'float', 'string', 'bool', 'natural',
                                 'import', 'eventually', 'always', 'advance', 'leave', 'stay', 'choose',
-                                'global', 'start', 'states', 'run', 'init', 'return'];
+                                'global', 'start', 'states', 'run', 'init', 'return', 'nmt', 'nft',
+                                'uncertain', 'unknown', 'eventually-always'];
                                 
                 // Skip if it's a keyword or defined in the same line
                 return !keywords.includes(varName) && 

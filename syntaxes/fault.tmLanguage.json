@@ -49,7 +49,7 @@
       "patterns": [
         {
           "name": "keyword.control.fault",
-          "match": "\\b(all|assert|assume|clock|const|def|else|flow|for|func|if|import|init|new|return|run|spec|stock|then|when|this|eventually|eventually-always|always|nmt|nft)\\b"
+          "match": "\\b(all|assert|assume|const|def|else|flow|for|func|if|import|init|new|return|run|spec|stock|then|when|this|eventually|eventually-always|always|nmt|nft)\\b"
         },
         {
           "name": "keyword.other.fault",
