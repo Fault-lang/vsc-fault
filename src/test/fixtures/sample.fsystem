@@ -1,8 +1,8 @@
 // Sample Fault system file for testing
 system PaymentSystem
 
-global timeout = 30
-global retries = 3
+global timeout = 30;
+global retries = 3;
 
 component PaymentProcessor = states {
     idle: func {

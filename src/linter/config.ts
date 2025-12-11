@@ -5,9 +5,9 @@ export interface FaultLinterConfig {
     rules: {
         'missing-semicolon': 'error' | 'warning' | 'info' | 'off';
         'invalid-flow-assignment': 'error' | 'warning' | 'info' | 'off';
-        'undefined-variable': 'error' | 'warning' | 'info' | 'off';
         'missing-type-annotation': 'error' | 'warning' | 'info' | 'off';
         'deprecated-syntax': 'error' | 'warning' | 'info' | 'off';
+        'missing-file-declaration': 'error' | 'warning' | 'info' | 'off';
     };
     debounceTime: number;
 }
@@ -23,9 +23,9 @@ export class ConfigManager {
             rules: {
                 'missing-semicolon': config.get('rules.missing-semicolon', 'error'),
                 'invalid-flow-assignment': config.get('rules.invalid-flow-assignment', 'error'),
-                'undefined-variable': config.get('rules.undefined-variable', 'warning'),
                 'missing-type-annotation': config.get('rules.missing-type-annotation', 'info'),
-                'deprecated-syntax': config.get('rules.deprecated-syntax', 'warning')
+                'deprecated-syntax': config.get('rules.deprecated-syntax', 'warning'),
+                'missing-file-declaration': config.get('rules.missing-file-declaration', 'error')
             },
             debounceTime: config.get<number>('debounceTime', 500)
         };

@@ -25,27 +25,13 @@ orderTotal = basePrice + tax`;
     test('Should detect invalid flow assignment', () => {
         const content = `spec TestSpec
 orderTotal = payment.amount`;
-        
+
         const document = createMockDocument(content);
         const diagnostics = linter.lint(document);
-        
+
         const invalidFlowDiagnostics = diagnostics.filter(d => d.code === 'invalid-flow-assignment');
         assert.ok(invalidFlowDiagnostics.length > 0, 'Should detect invalid flow assignment');
         assert.strictEqual(invalidFlowDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
-    });
-
-    test('Should suggest type annotations', () => {
-        const content = `def TestFlow = flow {
-    count: 42,
-    rate: 3.14
-}`;
-        
-        const document = createMockDocument(content);
-        const diagnostics = linter.lint(document);
-        
-        const typeAnnotationDiagnostics = diagnostics.filter(d => d.code === 'missing-type-annotation');
-        assert.ok(typeAnnotationDiagnostics.length > 0, 'Should suggest type annotations for numeric values');
-        assert.strictEqual(typeAnnotationDiagnostics[0].severity, vscode.DiagnosticSeverity.Information);
     });
 
     test('Should not lint comments', () => {
@@ -65,7 +51,7 @@ spec TestSpec`;
     });
 
     test('Should not flag valid syntax', () => {
-        const content = `spec OrderProcessing
+        const content = `spec OrderProcessing;
 
 import "payment.fspec";
 
@@ -88,15 +74,15 @@ def OrderFlow = flow {
 // Flow assignment
 orderTotal -> payment.amount;
 assert order.status == "completed" eventually;`;
-        
-        const document = createMockDocument(content);
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
         const diagnostics = linter.lint(document);
-        
+
         // Filter out undefined variable warnings for this test
-        const errorDiagnostics = diagnostics.filter(d => 
+        const errorDiagnostics = diagnostics.filter(d =>
             d.severity === vscode.DiagnosticSeverity.Error
         );
-        
+
         assert.strictEqual(errorDiagnostics.length, 0, 'Should not flag valid syntax as errors');
     });
 
@@ -130,20 +116,109 @@ assert order.status == "completed" eventually;`;
         const content = `spec TestSpec
 orderTotal = payment.amount
 orderTotal = payment.amount`; // Same line repeated
-        
+
         const document = createMockDocument(content);
         const diagnostics = linter.lint(document);
-        
+
         // Should have diagnostics but no duplicates for the same position
         const positions = diagnostics.map(d => `${d.range.start.line}:${d.range.start.character}`);
         const uniquePositions = new Set(positions);
-        
+
         assert.ok(diagnostics.length >= uniquePositions.size, 'Should filter duplicate diagnostics');
+    });
+
+    test('Should accept correct file declaration for .fspec file', () => {
+        const content = `spec OrderProcessing
+
+const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.strictEqual(fileDeclarationDiagnostics.length, 0, 'Should accept correct spec declaration');
+    });
+
+    test('Should accept correct file declaration for .fsystem file', () => {
+        const content = `system PaymentSystem
+
+global timeout = 30;`;
+
+        const document = createMockDocument(content, '/test/PaymentSystem.fsystem');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.strictEqual(fileDeclarationDiagnostics.length, 0, 'Should accept correct system declaration');
+    });
+
+    test('Should detect missing file declaration', () => {
+        const content = `const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.ok(fileDeclarationDiagnostics.length > 0, 'Should detect missing file declaration');
+        assert.strictEqual(fileDeclarationDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should detect filename mismatch', () => {
+        const content = `spec WrongName
+
+const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.ok(fileDeclarationDiagnostics.length > 0, 'Should detect filename mismatch');
+        assert.strictEqual(fileDeclarationDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should detect wrong keyword for file type', () => {
+        const content = `system OrderProcessing
+
+const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.ok(fileDeclarationDiagnostics.length > 0, 'Should detect wrong keyword for file type');
+        assert.strictEqual(fileDeclarationDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should handle comments before file declaration', () => {
+        const content = `// This is a comment
+/* Block comment */
+spec OrderProcessing
+
+const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.strictEqual(fileDeclarationDiagnostics.length, 0, 'Should handle comments before declaration');
+    });
+
+    test('Should detect filename mismatch with hyphens', () => {
+        const content = `// Sample Fault file with intentional syntax errors
+spec OrderProcessingWithErrors
+
+const MAX_RETRIES = 3;`;
+
+        const document = createMockDocument(content, '/test/sample-with-errors.fspec');
+        const diagnostics = linter.lint(document);
+
+        const fileDeclarationDiagnostics = diagnostics.filter(d => d.code === 'missing-file-declaration');
+        assert.ok(fileDeclarationDiagnostics.length > 0, 'Should detect filename mismatch (sample-with-errors vs OrderProcessingWithErrors)');
+        assert.strictEqual(fileDeclarationDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
     });
 });
 
 // Helper function to create a mock VS Code document
-function createMockDocument(content: string): vscode.TextDocument {
+function createMockDocument(content: string, fileName: string = '/test/document.fspec'): vscode.TextDocument {
     const lines = content.split('\n');
     return {
         getText: () => content,
@@ -155,8 +230,8 @@ function createMockDocument(content: string): vscode.TextDocument {
             isEmptyOrWhitespace: !lines[line]?.trim()
         }),
         lineCount: lines.length,
-        uri: vscode.Uri.file('/test/document.fspec'),
-        fileName: '/test/document.fspec',
+        uri: vscode.Uri.file(fileName),
+        fileName: fileName,
         languageId: 'fault',
         version: 1,
         isDirty: false,

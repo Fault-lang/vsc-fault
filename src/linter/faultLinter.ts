@@ -5,7 +5,7 @@ export interface LintRule {
     message: string;
     severity: vscode.DiagnosticSeverity;
     pattern: RegExp;
-    validate?: (match: RegExpMatchArray, line: string, lineNumber: number) => boolean;
+    validate?: (match: RegExpMatchArray, line: string, lineNumber: number, document?: vscode.TextDocument) => boolean;
 }
 
 export class FaultLinter {
@@ -15,24 +15,116 @@ export class FaultLinter {
             id: 'missing-semicolon',
             message: 'Missing semicolon at end of statement',
             severity: vscode.DiagnosticSeverity.Error,
-            pattern: /^[^\/\*]*([=].*|[a-zA-Z_][a-zA-Z0-9_]*\s*\+\+|[a-zA-Z_][a-zA-Z0-9_]*\s*--)(?!.*[;}])\s*$/,
+            pattern: /.+/,  // Match any non-empty line
             validate: (match, line, lineNumber) => {
                 const trimmed = line.trim();
-                // Skip comments
-                if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+
+                // Skip empty lines and comments
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
                     return false;
                 }
-                // Skip lines that are inside blocks or control structures
-                if (trimmed.endsWith('{') || trimmed.endsWith('}') || 
-                    trimmed.includes('then') || trimmed.includes('else') ||
-                    trimmed.includes('spec ') || trimmed.includes('import ') ||
-                    trimmed.includes('def ') || trimmed.includes('assert ') ||
-                    trimmed.includes('assume ')) {
+
+                // Skip lines that already end with semicolon or opening brace
+                if (trimmed.endsWith(';') || trimmed.endsWith('{')) {
                     return false;
                 }
-                // Only flag simple assignment statements
-                return /^[a-zA-Z_][a-zA-Z0-9_]*\s*[=]\s*[^=]/.test(trimmed) ||
-                       /^[a-zA-Z_][a-zA-Z0-9_]*\s*(\+\+|--)\s*$/.test(trimmed);
+
+                // Skip closing braces (they never need semicolons by themselves)
+                if (trimmed === '}' || trimmed.endsWith('}') && !trimmed.includes('=')) {
+                    return false;
+                }
+
+                // Skip if/else keywords (never need semicolons)
+                if (/^\s*(if|else|for)\b/.test(trimmed)) {
+                    return false;
+                }
+
+                // Check for top-level declarations that MUST have semicolons
+
+                // 1. system <name> - MUST have semicolon
+                if (/^\s*system\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$/.test(trimmed)) {
+                    return true;
+                }
+
+                // 2. spec <name> - MUST have semicolon
+                if (/^\s*spec\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$/.test(trimmed)) {
+                    return true;
+                }
+
+                // 3. import "..." - MUST have semicolon (but not if it ends with {})
+                if (/^\s*import\s+/.test(trimmed) && !trimmed.endsWith(')')) {
+                    return true;
+                }
+
+                // 4. global x = ... - MUST have semicolon
+                if (/^\s*global\s+[a-zA-Z_]/.test(trimmed)) {
+                    return true;
+                }
+
+                // 5. const declarations - MUST have semicolon (but not if it's const (...))
+                if (/^\s*const\s+[a-zA-Z_]/.test(trimmed) && !trimmed.includes('(')) {
+                    return true;
+                }
+
+                // 6. def X = flow/stock {...} - MUST have semicolon
+                if (/^\s*def\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=/.test(trimmed) && trimmed.endsWith('}')) {
+                    return true;
+                }
+
+                // 7. component X = states {...} - MUST have semicolon
+                if (/^\s*component\s+[a-zA-Z_]/.test(trimmed) && trimmed.endsWith('}')) {
+                    return true;
+                }
+
+                // 8. start {...} - MUST have semicolon
+                if (/^\s*start\s*\{/.test(trimmed) && trimmed.endsWith('}')) {
+                    return true;
+                }
+
+                // 9. assert/assume statements - MUST have semicolon
+                if (/^\s*(assert|assume)\s+/.test(trimmed)) {
+                    return true;
+                }
+
+                // 10. String declarations: x = "..." or x = `...` - MUST have semicolon
+                if (/^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*["'`]/.test(trimmed)) {
+                    return true;
+                }
+
+                // 11. Simple assignments (but not in object/flow literals with trailing comma)
+                if (/^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*[=]\s*[^=]/.test(trimmed) && !trimmed.endsWith(',')) {
+                    // Skip if it's inside a flow/stock/states definition (has a colon before)
+                    if (!trimmed.includes(':')) {
+                        return true;
+                    }
+                }
+
+                // 12. Increment/decrement operators - MUST have semicolon
+                if (/^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(\+\+|--)\s*$/.test(trimmed)) {
+                    return true;
+                }
+
+                // 13. Parameter calls in state/run blocks: component.method() - MUST have semicolon
+                if (/^\s*([a-zA-Z_][a-zA-Z0-9_]*|this)(\.[a-zA-Z_][a-zA-Z0-9_]*)+\s*(\([^)]*\))?\s*$/.test(trimmed)) {
+                    return true;
+                }
+
+                // 14. State changes: advance(...), stay(), leave() - MUST have semicolon
+                if (/^\s*(advance|stay|leave|choose)\s*\(/.test(trimmed) && trimmed.endsWith(')')) {
+                    return true;
+                }
+
+                // 15. Init declarations: x = new Component - MUST have semicolon
+                if (/^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*new\s+/.test(trimmed)) {
+                    return true;
+                }
+
+                // 16. Flow/arrow assignments: a -> b or a <- b - MUST have semicolon
+                if (/(<-|->)/.test(trimmed)) {
+                    return true;
+                }
+
+                return false;
             }
         },
         {
@@ -55,53 +147,71 @@ export class FaultLinter {
             }
         },
         {
-            id: 'undefined-variable',
-            message: 'Variable may be undefined',
-            severity: vscode.DiagnosticSeverity.Warning,
-            pattern: /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g,
-            validate: (match, line, lineNumber) => {
-                const trimmed = line.trim();
-                // Skip comments completely
-                if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
-                    return false;
-                }
-                
-                const varName = match[1];
-                // Extended list of keywords and common identifiers to skip
-                const keywords = ['all', 'system', 'spec', 'component', 'def', 'const', 'if', 'else', 'then', 'when',
-                                'assert', 'assume', 'flow', 'stock', 'func', 'for', 'new', 'this', 'now',
-                                'true', 'false', 'nil', 'int', 'float', 'string', 'bool', 'natural',
-                                'import', 'eventually', 'always', 'advance', 'leave', 'stay', 'choose',
-                                'global', 'start', 'states', 'run', 'init', 'return', 'nmt', 'nft',
-                                'uncertain', 'unknown', 'eventually-always'];
-                                
-                // Skip if it's a keyword or defined in the same line
-                return !keywords.includes(varName) && 
-                       !line.includes('const ' + varName) && 
-                       !line.includes('def ' + varName) && 
-                       !line.includes(varName + ':') &&
-                       !line.includes('spec ' + varName) &&
-                       !line.includes('system ' + varName);
-            }
-        },
-        {
-            id: 'missing-type-annotation',
-            message: 'Consider adding type annotation for better clarity',
-            severity: vscode.DiagnosticSeverity.Information,
-            pattern: /([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^,}]+)(?![a-zA-Z])/,
-            validate: (match, line, lineNumber) => {
-                const value = match[2].trim();
-                // Suggest type annotation for ambiguous values
-                return /^[0-9]+$/.test(value) || /^[0-9]*\.[0-9]+$/.test(value) || 
-                       value === 'true' || value === 'false';
-            }
-        },
-        {
             id: 'deprecated-syntax',
             message: 'This syntax is deprecated, consider using modern Fault syntax',
             severity: vscode.DiagnosticSeverity.Warning,
             pattern: /\b(old_keyword|legacy_syntax)\b/,
             validate: () => true
+        },
+        {
+            id: 'missing-file-declaration',
+            message: 'First line must be "system <filename>;" or "spec <filename>;" where <filename> matches the file name',
+            severity: vscode.DiagnosticSeverity.Error,
+            pattern: /^(?:\/\/.*|\/\*[\s\S]*?\*\/|\s)*(?:(system|spec)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;)?/,
+            validate: (match, line, lineNumber, document) => {
+                // Only check the first non-comment, non-empty line
+                if (lineNumber !== 0 && !document) {
+                    return false;
+                }
+
+                if (!document) {
+                    return false;
+                }
+
+                const text = document.getText();
+                const lines = text.split('\n');
+
+                // Find first non-comment, non-empty line
+                let firstCodeLineIndex = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    const trimmed = lines[i].trim();
+                    if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('/*')) {
+                        firstCodeLineIndex = i;
+                        break;
+                    }
+                }
+
+                // Only validate if this is the first code line
+                if (lineNumber !== firstCodeLineIndex) {
+                    return false;
+                }
+
+                const keyword = match[1];
+                const declaredName = match[2];
+
+                // Get filename without extension
+                const path = require('path');
+                const basename = path.basename(document.fileName);
+                const fileNameWithoutExt = basename.replace(/\.(fspec|fsystem)$/, '');
+
+                // Check if declaration is missing
+                if (!keyword || !declaredName) {
+                    return true; // Flag error: missing declaration
+                }
+
+                // Check if declared name matches filename
+                if (declaredName !== fileNameWithoutExt) {
+                    return true; // Flag error: name mismatch
+                }
+
+                // Check if declaration matches file type
+                const extension = basename.endsWith('.fspec') ? 'spec' : 'system';
+                if (keyword !== extension) {
+                    return true; // Flag error: wrong keyword for file type
+                }
+
+                return false; // All checks passed
+            }
         }
     ];
 
@@ -110,14 +220,22 @@ export class FaultLinter {
         const text = document.getText();
         const lines = text.split('\n');
 
+        // Check file declaration first (once per document)
+        this.checkFileDeclaration(document, diagnostics);
+
         lines.forEach((line, lineNumber) => {
             this.rules.forEach(rule => {
+                // Skip the file declaration rule since we handle it separately
+                if (rule.id === 'missing-file-declaration') {
+                    return;
+                }
+
                 if (rule.pattern.global) {
                     // Handle global regex patterns
                     rule.pattern.lastIndex = 0; // Reset global regex
                     let match;
                     while ((match = rule.pattern.exec(line)) !== null) {
-                        if (!rule.validate || rule.validate(match, line, lineNumber)) {
+                        if (!rule.validate || rule.validate(match, line, lineNumber, document)) {
                             const diagnostic = this.createDiagnostic(
                                 document,
                                 lineNumber,
@@ -133,7 +251,7 @@ export class FaultLinter {
                 } else {
                     // Handle non-global regex patterns
                     const match = line.match(rule.pattern);
-                    if (match && (!rule.validate || rule.validate(match, line, lineNumber))) {
+                    if (match && (!rule.validate || rule.validate(match, line, lineNumber, document))) {
                         const diagnostic = this.createDiagnostic(
                             document,
                             lineNumber,
@@ -150,6 +268,85 @@ export class FaultLinter {
         });
 
         return this.filterDuplicates(diagnostics);
+    }
+
+    private checkFileDeclaration(document: vscode.TextDocument, diagnostics: vscode.Diagnostic[]): void {
+        const text = document.getText();
+        const lines = text.split('\n');
+
+        // Find first non-comment, non-empty line
+        let firstCodeLineIndex = -1;
+        let firstCodeLine = '';
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+            if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('/*')) {
+                firstCodeLineIndex = i;
+                firstCodeLine = trimmed;
+                break;
+            }
+        }
+
+        // If no code found, don't check
+        if (firstCodeLineIndex === -1) {
+            return;
+        }
+
+        // Get filename without extension
+        const path = require('path');
+        const basename = path.basename(document.fileName);
+        const fileNameWithoutExt = basename.replace(/\.(fspec|fsystem)$/, '');
+
+        // Check if first line has a system/spec declaration
+        const declPattern = /^(system|spec)\s+([a-zA-Z_][a-zA-Z0-9_]*)/;
+        const match = firstCodeLine.match(declPattern);
+
+        if (!match) {
+            // Missing declaration
+            const diagnostic = this.createDiagnostic(
+                document,
+                firstCodeLineIndex,
+                0,
+                firstCodeLine.length,
+                'First line must be "system <filename>;" or "spec <filename>;" where <filename> matches the file name',
+                vscode.DiagnosticSeverity.Error,
+                'missing-file-declaration'
+            );
+            diagnostics.push(diagnostic);
+            return;
+        }
+
+        const keyword = match[1];
+        const declaredName = match[2];
+
+        // Check if declared name matches filename
+        if (declaredName !== fileNameWithoutExt) {
+            const diagnostic = this.createDiagnostic(
+                document,
+                firstCodeLineIndex,
+                match.index! + match[1].length + 1, // Start at the name
+                declaredName.length,
+                `Declaration name "${declaredName}" does not match filename "${fileNameWithoutExt}"`,
+                vscode.DiagnosticSeverity.Error,
+                'missing-file-declaration'
+            );
+            diagnostics.push(diagnostic);
+            return;
+        }
+
+        // Check if declaration matches file type
+        const expectedKeyword = basename.endsWith('.fspec') ? 'spec' : 'system';
+        if (keyword !== expectedKeyword) {
+            const diagnostic = this.createDiagnostic(
+                document,
+                firstCodeLineIndex,
+                match.index!,
+                keyword.length,
+                `.${basename.endsWith('.fspec') ? 'fspec' : 'fsystem'} files must use "${expectedKeyword}" keyword, not "${keyword}"`,
+                vscode.DiagnosticSeverity.Error,
+                'missing-file-declaration'
+            );
+            diagnostics.push(diagnostic);
+        }
     }
 
     private createDiagnostic(

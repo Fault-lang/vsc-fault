@@ -1,7 +1,7 @@
 // Sample Fault file with intentional syntax errors for linting demonstration
-spec OrderProcessingWithErrors
+spec sample_with_errors;
 
-import "payment.fspec"
+import "payment.fspec";
 
 const MAX_RETRIES = 3  // Missing semicolon
 const TIMEOUT = "30s";

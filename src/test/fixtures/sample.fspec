@@ -1,10 +1,10 @@
 // Sample Fault specification file for testing
-spec OrderProcessing
+spec OrderProcessing;
 
-import "payment.fspec"
+import "payment.fspec";
 
-const MAX_RETRIES = 3
-const TIMEOUT = "30s"
+const MAX_RETRIES = 3;
+const TIMEOUT = "30s";
 
 def OrderFlow = flow {
     status: "pending",
@@ -12,29 +12,29 @@ def OrderFlow = flow {
     amount: 0.0,
     processOrder: func {
         if this.retries < MAX_RETRIES then {
-            this.status = "processing"
-            this.retries->1;
+            this.status = "processing";
+            this.retries++;
         } else {
-            this.status = "failed"
+            this.status = "failed";
         }
     }
-}
+};
 
 // Test various operators and expressions
-orderTotal = basePrice + tax - discount
-isValid = amount > 0 && status == "confirmed"
-calculation = price * quantity / 100
+orderTotal = basePrice + tax - discount;
+isValid = amount > 0 && status == "confirmed";
+calculation = price * quantity / 100;
 
 // Test temporal operators
-assert order.status == "completed" eventually
-assume payment.verified == true always
+assert order.status == "completed" eventually;
+assume payment.verified == true always;
 
-// Test string literals and escape sequences  
-message = "Order #123 is \"complete\""
-rawPath = `C:\data\orders\file.txt`
+// Test string literals and escape sequences
+message = "Order #123 is \"complete\"";
+rawPath = `C:\data\orders\file.txt`;
 
 // Test numeric literals
-hexValue = 0xFF
-octalValue = 0755
-floatValue = 3.14159
-scientificNotation = 1.23e-4
+hexValue = 0xFF;
+octalValue = 0755;
+floatValue = 3.14159;
+scientificNotation = 1.23e-4;

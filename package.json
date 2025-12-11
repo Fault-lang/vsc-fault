@@ -77,12 +77,6 @@
           "default": "error",
           "description": "Severity level for invalid flow assignment rule"
         },
-        "fault-linter.rules.undefined-variable": {
-          "type": "string",
-          "enum": ["error", "warning", "info", "off"],
-          "default": "warning",
-          "description": "Severity level for undefined variable rule"
-        },
         "fault-linter.rules.missing-type-annotation": {
           "type": "string",
           "enum": ["error", "warning", "info", "off"],
