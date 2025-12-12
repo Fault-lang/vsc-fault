@@ -215,6 +215,149 @@ const MAX_RETRIES = 3;`;
         assert.ok(fileDeclarationDiagnostics.length > 0, 'Should detect filename mismatch (sample-with-errors vs OrderProcessingWithErrors)');
         assert.strictEqual(fileDeclarationDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
     });
+
+    test('Should flag global declaration in .fspec file', () => {
+        const content = `spec TestSpec;
+
+global counter = 0;`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-global');
+        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag global in .fspec file');
+        assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should flag component declaration in .fspec file', () => {
+        const content = `spec TestSpec;
+
+component OrderProcessor = states {
+    idle: func { }
+};`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-component');
+        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag component in .fspec file');
+        assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should flag start block in .fspec file', () => {
+        const content = `spec TestSpec;
+
+start {
+    processor: idle
+};`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-start');
+        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag start block in .fspec file');
+        assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should flag def declaration in .fsystem file', () => {
+        const content = `system TestSystem;
+
+def OrderFlow = flow {
+    status: "pending"
+};`;
+
+        const document = createMockDocument(content, '/test/TestSystem.fsystem');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-def');
+        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag def in .fsystem file');
+        assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should allow global in .fsystem file', () => {
+        const content = `system TestSystem;
+
+global counter = 0;`;
+
+        const document = createMockDocument(content, '/test/TestSystem.fsystem');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-global');
+        assert.strictEqual(wrongFileTypeDiagnostics.length, 0, 'Should allow global in .fsystem file');
+    });
+
+    test('Should allow def in .fspec file', () => {
+        const content = `spec TestSpec;
+
+def OrderFlow = flow {
+    status: "pending"
+};`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-def');
+        assert.strictEqual(wrongFileTypeDiagnostics.length, 0, 'Should allow def in .fspec file');
+    });
+
+    test('Should detect const reassignment', () => {
+        const content = `spec TestSpec;
+
+const MAX_RETRIES = 3;
+
+MAX_RETRIES = 5;`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
+        assert.ok(constReassignmentDiagnostics.length > 0, 'Should detect const reassignment');
+        assert.strictEqual(constReassignmentDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+        assert.ok(constReassignmentDiagnostics[0].message.includes('MAX_RETRIES'), 'Error message should mention the constant name');
+    });
+
+    test('Should detect compound assignment to const', () => {
+        const content = `spec TestSpec;
+
+const COUNTER = 0;
+
+COUNTER += 1;`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
+        assert.ok(constReassignmentDiagnostics.length > 0, 'Should detect compound assignment to const');
+        assert.strictEqual(constReassignmentDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should allow assignment to non-const variable', () => {
+        const content = `spec TestSpec;
+
+const MAX_RETRIES = 3;
+
+retries = 1;
+retries = 2;`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
+        assert.strictEqual(constReassignmentDiagnostics.length, 0, 'Should allow assignment to non-const variables');
+    });
+
+    test('Should allow const initial assignment', () => {
+        const content = `spec TestSpec;
+
+const MAX_RETRIES = 3;
+const TIMEOUT = 30;`;
+
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+
+        const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
+        assert.strictEqual(constReassignmentDiagnostics.length, 0, 'Should allow const initial assignments');
+    });
 });
 
 // Helper function to create a mock VS Code document

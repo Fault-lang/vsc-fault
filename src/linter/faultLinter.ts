@@ -212,6 +212,63 @@ export class FaultLinter {
 
                 return false; // All checks passed
             }
+        },
+        // File-type restriction rules
+        {
+            id: 'wrong-file-type-global',
+            message: 'global declarations can only be used in .fsystem files',
+            severity: vscode.DiagnosticSeverity.Error,
+            pattern: /^\s*global\s+[a-zA-Z_]/,
+            validate: (match, line, lineNumber, document) => {
+                if (!document) {
+                    return false;
+                }
+                const basename = require('path').basename(document.fileName);
+                // Flag error if this is in a .fspec file
+                return basename.endsWith('.fspec');
+            }
+        },
+        {
+            id: 'wrong-file-type-component',
+            message: 'component declarations can only be used in .fsystem files',
+            severity: vscode.DiagnosticSeverity.Error,
+            pattern: /^\s*component\s+[a-zA-Z_]/,
+            validate: (match, line, lineNumber, document) => {
+                if (!document) {
+                    return false;
+                }
+                const basename = require('path').basename(document.fileName);
+                // Flag error if this is in a .fspec file
+                return basename.endsWith('.fspec');
+            }
+        },
+        {
+            id: 'wrong-file-type-start',
+            message: 'start blocks can only be used in .fsystem files',
+            severity: vscode.DiagnosticSeverity.Error,
+            pattern: /^\s*start\s*\{/,
+            validate: (match, line, lineNumber, document) => {
+                if (!document) {
+                    return false;
+                }
+                const basename = require('path').basename(document.fileName);
+                // Flag error if this is in a .fspec file
+                return basename.endsWith('.fspec');
+            }
+        },
+        {
+            id: 'wrong-file-type-def',
+            message: 'def declarations (flow/stock) can only be used in .fspec files',
+            severity: vscode.DiagnosticSeverity.Error,
+            pattern: /^\s*def\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*(flow|stock)/,
+            validate: (match, line, lineNumber, document) => {
+                if (!document) {
+                    return false;
+                }
+                const basename = require('path').basename(document.fileName);
+                // Flag error if this is in a .fsystem file
+                return basename.endsWith('.fsystem');
+            }
         }
     ];
 
@@ -222,6 +279,9 @@ export class FaultLinter {
 
         // Check file declaration first (once per document)
         this.checkFileDeclaration(document, diagnostics);
+
+        // Check for const reassignments
+        this.checkConstReassignments(document, diagnostics);
 
         lines.forEach((line, lineNumber) => {
             this.rules.forEach(rule => {
@@ -347,6 +407,61 @@ export class FaultLinter {
             );
             diagnostics.push(diagnostic);
         }
+    }
+
+    private checkConstReassignments(document: vscode.TextDocument, diagnostics: vscode.Diagnostic[]): void {
+        const text = document.getText();
+        const lines = text.split('\n');
+
+        // First pass: collect all const identifiers
+        const constants = new Set<string>();
+        const constPattern = /^\s*const\s+([a-zA-Z_][a-zA-Z0-9_]*)/;
+
+        lines.forEach((line) => {
+            const trimmed = line.trim();
+            // Skip comments
+            if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+                return;
+            }
+
+            const match = trimmed.match(constPattern);
+            if (match) {
+                constants.add(match[1]);
+            }
+        });
+
+        // Second pass: check for reassignments to constants
+        const assignmentPattern = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([+\-*/]?=)/;
+
+        lines.forEach((line, lineNumber) => {
+            const trimmed = line.trim();
+
+            // Skip comments and const declarations themselves
+            if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('const ')) {
+                return;
+            }
+
+            const match = trimmed.match(assignmentPattern);
+            if (match) {
+                const identifier = match[1];
+                const operator = match[2];
+
+                // Check if this identifier is a constant
+                if (constants.has(identifier)) {
+                    const startIndex = line.indexOf(identifier);
+                    const diagnostic = this.createDiagnostic(
+                        document,
+                        lineNumber,
+                        startIndex,
+                        identifier.length,
+                        `Cannot reassign constant "${identifier}". Constants declared with 'const' are immutable.`,
+                        vscode.DiagnosticSeverity.Error,
+                        'const-reassignment'
+                    );
+                    diagnostics.push(diagnostic);
+                }
+            }
+        });
     }
 
     private createDiagnostic(
