@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { FaultDiagnosticProvider } from './linter/diagnosticProvider';
+import { FaultCodeActionProvider } from './linter/codeActionProvider';
 
 let diagnosticProvider: FaultDiagnosticProvider;
 
@@ -32,6 +33,19 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(refreshLintingCommand, clearDiagnosticsCommand);
+
+    // Register quick-fix code actions
+    const faultSelector = [
+        { language: 'fault', scheme: 'file' },
+        { language: 'fault', scheme: 'untitled' }
+    ];
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            faultSelector,
+            new FaultCodeActionProvider(),
+            { providedCodeActionKinds: FaultCodeActionProvider.providedCodeActionKinds }
+        )
+    );
 
     // Show activation message
     vscode.window.showInformationMessage('Fault Language Support with linting is now active!');

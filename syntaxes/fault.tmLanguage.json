@@ -10,6 +10,9 @@
       "include": "#comments"
     },
     {
+      "include": "#builtins"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -45,6 +48,14 @@
         }
       ]
     },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.fault",
+          "match": "\\b(advance|stay|leave)\\b"
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
@@ -53,7 +64,7 @@
         },
         {
           "name": "keyword.other.fault",
-          "match": "\\b(advance|component|choose|global|leave|system|start|states|stay)\\b"
+          "match": "\\b(component|choose|global|system|start|states)\\b"
         },
         {
           "name": "constant.language.fault",

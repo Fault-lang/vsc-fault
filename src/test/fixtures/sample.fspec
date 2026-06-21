@@ -1,40 +1,42 @@
-// Sample Fault specification file for testing
-spec OrderProcessing;
+// Valid Fault specification — token bucket rate limiter
+spec sample;
 
-import "payment.fspec";
+const MAXCAPACITY = 100;
+const RATE = 10;
 
-const MAX_RETRIES = 3;
-const TIMEOUT = "30s";
-
-def OrderFlow = flow {
-    status: "pending",
-    retries: 0,
-    amount: 0.0,
-    processOrder: func {
-        if this.retries < MAX_RETRIES then {
-            this.status = "processing";
-            this.retries++;
-        } else {
-            this.status = "failed";
-        }
-    }
+def tokenBucket = stock{
+    tokens: unknown(),
+    capacity: MAXCAPACITY,
 };
 
-// Test various operators and expressions
-orderTotal = basePrice + tax - discount;
-isValid = amount > 0 && status == "confirmed";
-calculation = price * quantity / 100;
+def fillFlow = flow{
+    bucket: new tokenBucket,
+    fill: func{
+        if bucket.tokens < bucket.capacity {
+            bucket.tokens <- RATE;
+        }
+    },
+};
 
-// Test temporal operators
-assert order.status == "completed" eventually;
-assume payment.verified == true always;
+def consumeFlow = flow{
+    bucket: new tokenBucket,
+    consume: func{
+        bucket.tokens -> 1;
+    },
+};
 
-// Test string literals and escape sequences
-message = "Order #123 is \"complete\"";
-rawPath = `C:\data\orders\file.txt`;
+assert tokenBucket.tokens >= 0 always;
+assert tokenBucket.tokens <= MAXCAPACITY always;
 
-// Test numeric literals
-hexValue = 0xFF;
-octalValue = 0755;
-floatValue = 3.14159;
-scientificNotation = 1.23e-4;
+run init {
+    fill = new fillFlow;
+    consume = new consumeFlow;
+    consume.bucket = fill.bucket;
+} {
+    if fill.bucket.tokens < MAXCAPACITY {
+        fill.fill;
+    }
+    if consume.bucket.tokens > 0 {
+        consume.consume;
+    }
+}

@@ -65,36 +65,100 @@
           "default": true,
           "description": "Enable/disable Fault language linting"
         },
-        "fault-linter.rules.missing-semicolon": {
-          "type": "string",
-          "enum": ["error", "warning", "info", "off"],
-          "default": "error",
-          "description": "Severity level for missing semicolon rule"
-        },
-        "fault-linter.rules.invalid-flow-assignment": {
-          "type": "string",
-          "enum": ["error", "warning", "info", "off"],
-          "default": "error",
-          "description": "Severity level for invalid flow assignment rule"
-        },
-        "fault-linter.rules.missing-type-annotation": {
-          "type": "string",
-          "enum": ["error", "warning", "info", "off"],
-          "default": "info",
-          "description": "Severity level for missing type annotation rule"
-        },
-        "fault-linter.rules.deprecated-syntax": {
-          "type": "string",
-          "enum": ["error", "warning", "info", "off"],
-          "default": "warning",
-          "description": "Severity level for deprecated syntax rule"
-        },
         "fault-linter.debounceTime": {
           "type": "number",
           "default": 500,
           "minimum": 100,
           "maximum": 5000,
           "description": "Debounce time in milliseconds for linting on document changes"
+        },
+        "fault-linter.rules.missing-semicolon": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Missing semicolon at end of statement"
+        },
+        "fault-linter.rules.missing-comma": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Missing trailing comma in stock/flow property"
+        },
+        "fault-linter.rules.invalid-flow-assignment": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Flow assignments must use -> or <- operators"
+        },
+        "fault-linter.rules.missing-file-declaration": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "File must begin with spec/system declaration matching filename"
+        },
+        "fault-linter.rules.flow-scalar-property": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Scalar value in flow property (causes compiler panic)"
+        },
+        "fault-linter.rules.directional-operator-expression-rhs": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "RHS of <- or -> must be a plain delta, not an arithmetic expression"
+        },
+        "fault-linter.rules.state-builtin-in-fspec": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "stay()/advance()/leave() are only valid in .fsystem files"
+        },
+        "fault-linter.rules.invalid-identifier": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Identifiers must be alphanumeric only (no underscores or hyphens)"
+        },
+        "fault-linter.rules.when-then-temporal": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "when/then invariants cannot have a temporal qualifier"
+        },
+        "fault-linter.rules.const-group-syntax": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Grouped const blocks are not valid Fault syntax"
+        },
+        "fault-linter.rules.import-in-fspec": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "import can only be used in .fsystem files"
+        },
+        "fault-linter.rules.choose-misuse": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "choose requires two or more || alternatives of advance()/leave()/stay()"
+        },
+        "fault-linter.rules.const-reassignment": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "Cannot reassign a const-declared identifier"
+        },
+        "fault-linter.rules.wrong-file-type-global": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "global declarations can only be used in .fsystem files"
+        },
+        "fault-linter.rules.wrong-file-type-component": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "component declarations can only be used in .fsystem files"
+        },
+        "fault-linter.rules.wrong-file-type-import": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "import can only be used in .fsystem files"
+        },
+        "fault-linter.rules.wrong-file-type-def": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "def declarations can only be used in .fspec files"
+        },
+        "fault-linter.rules.unfalsifiable-assertion": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "warning",
+          "description": "Asserting an already-assumed expression is unfalsifiable"
+        },
+        "fault-linter.rules.missing-run-block": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "warning",
+          "description": ".fspec file has no run block for the solver to execute"
+        },
+        "fault-linter.rules.empty-func-body": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "warning",
+          "description": "func{} body is empty and has no effect"
+        },
+        "fault-linter.rules.undeclared-stock-type": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
+          "description": "new StockType where StockType has no def declaration"
+        },
+        "fault-linter.rules.identical-branch-calls": {
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "warning",
+          "description": "Both branches of an if/else call the same function"
         }
       }
     }

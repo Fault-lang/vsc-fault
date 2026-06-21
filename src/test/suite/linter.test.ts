@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { FaultLinter } from '../../linter/faultLinter';
+import { FaultCodeActionProvider } from '../../linter/codeActionProvider';
 
 suite('Linter Test Suite', () => {
     let linter: FaultLinter;
@@ -51,34 +52,36 @@ spec TestSpec`;
     });
 
     test('Should not flag valid syntax', () => {
-        const content = `spec OrderProcessing;
+        const content = `spec orderProcessing;
 
-import "payment.fspec";
+const MAXRETRIES = 3;
+const RATE = 10;
 
-const MAX_RETRIES = 3;
-const TIMEOUT = "30s";
-
-def OrderFlow = flow {
-    status: string("pending"),
-    retries: int(0),
-    processOrder: func {
-        if this.retries < MAX_RETRIES then {
-            this.status = "processing";
-            this.retries++;
-        } else {
-            this.status = "failed";
-        }
-    }
+def tokenBucket = stock{
+    tokens: unknown(),
+    capacity: MAXRETRIES,
 };
 
-// Flow assignment
-orderTotal -> payment.amount;
-assert order.status == "completed" eventually;`;
+def fillFlow = flow{
+    bucket: new tokenBucket,
+    fill: func{
+        if bucket.tokens < bucket.capacity {
+            bucket.tokens <- RATE;
+        }
+    },
+};
 
-        const document = createMockDocument(content, '/test/OrderProcessing.fspec');
+assert tokenBucket.tokens >= 0 always;
+
+run init {
+    f = new fillFlow;
+} {
+    f.fill;
+}`;
+
+        const document = createMockDocument(content, '/test/orderProcessing.fspec');
         const diagnostics = linter.lint(document);
 
-        // Filter out undefined variable warnings for this test
         const errorDiagnostics = diagnostics.filter(d =>
             d.severity === vscode.DiagnosticSeverity.Error
         );
@@ -244,18 +247,18 @@ component OrderProcessor = states {
         assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
     });
 
-    test('Should flag start block in .fspec file', () => {
+    test('Should flag import in .fspec file', () => {
         const content = `spec TestSpec;
 
-start {
-    processor: idle
-};`;
+import(
+    other "../other.fspec"
+);`;
 
         const document = createMockDocument(content, '/test/TestSpec.fspec');
         const diagnostics = linter.lint(document);
 
-        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-start');
-        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag start block in .fspec file');
+        const wrongFileTypeDiagnostics = diagnostics.filter(d => d.code === 'wrong-file-type-import');
+        assert.ok(wrongFileTypeDiagnostics.length > 0, 'Should flag import in .fspec file');
         assert.strictEqual(wrongFileTypeDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
     });
 
@@ -303,9 +306,9 @@ def OrderFlow = flow {
     test('Should detect const reassignment', () => {
         const content = `spec TestSpec;
 
-const MAX_RETRIES = 3;
+const MAXRETRIES = 3;
 
-MAX_RETRIES = 5;`;
+MAXRETRIES = 5;`;
 
         const document = createMockDocument(content, '/test/TestSpec.fspec');
         const diagnostics = linter.lint(document);
@@ -313,7 +316,7 @@ MAX_RETRIES = 5;`;
         const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
         assert.ok(constReassignmentDiagnostics.length > 0, 'Should detect const reassignment');
         assert.strictEqual(constReassignmentDiagnostics[0].severity, vscode.DiagnosticSeverity.Error);
-        assert.ok(constReassignmentDiagnostics[0].message.includes('MAX_RETRIES'), 'Error message should mention the constant name');
+        assert.ok(constReassignmentDiagnostics[0].message.includes('MAXRETRIES'), 'Error message should mention the constant name');
     });
 
     test('Should detect compound assignment to const', () => {
@@ -334,7 +337,7 @@ COUNTER += 1;`;
     test('Should allow assignment to non-const variable', () => {
         const content = `spec TestSpec;
 
-const MAX_RETRIES = 3;
+const MAXRETRIES = 3;
 
 retries = 1;
 retries = 2;`;
@@ -357,6 +360,404 @@ const TIMEOUT = 30;`;
 
         const constReassignmentDiagnostics = diagnostics.filter(d => d.code === 'const-reassignment');
         assert.strictEqual(constReassignmentDiagnostics.length, 0, 'Should allow const initial assignments');
+    });
+
+    // ── New rule tests ──────────────────────────────────────────────────────
+
+    test('Should not flag swap assignment inside init block', () => {
+        const content = `spec TestSpec;
+
+def bucket = stock{ tokens: unknown(), };
+def filler = flow{ b: new bucket, fill: func{ b.tokens <- 1; }, };
+def drainer = flow{ b: new bucket, drain: func{ b.tokens -> 1; }, };
+
+run init {
+    f = new filler;
+    d = new drainer;
+    d.b = f.b;
+} {
+    f.fill;
+}`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const flowAssignDiags = diagnostics.filter(d => d.code === 'invalid-flow-assignment');
+        assert.strictEqual(flowAssignDiags.length, 0, 'Should not flag swap inside init block');
+    });
+
+    test('Should detect const-group-syntax', () => {
+        const content = `spec TestSpec;
+
+const (
+    MAX = 100;
+    RATE = 3;
+)
+
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'const-group-syntax');
+        assert.ok(diags.length > 0, 'Should detect grouped const syntax');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag valid single const', () => {
+        const content = `spec TestSpec;
+const MAX = 100;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'const-group-syntax');
+        assert.strictEqual(diags.length, 0, 'Should not flag single const declaration');
+    });
+
+    test('Should detect when-then-temporal', () => {
+        const content = `spec TestSpec;
+def b = stock{ tokens: unknown(), };
+assert when b.tokens < 0 then b.tokens >= 0 always;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'when-then-temporal');
+        assert.ok(diags.length > 0, 'Should detect when/then with temporal qualifier');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag when-then without temporal qualifier', () => {
+        const content = `spec TestSpec;
+def b = stock{ tokens: unknown(), };
+assert when b.tokens < 0 then b.tokens >= 0;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'when-then-temporal');
+        assert.strictEqual(diags.length, 0, 'Should not flag when/then without temporal qualifier');
+    });
+
+    test('Should detect state-builtin-in-fspec', () => {
+        const content = `spec TestSpec;
+def s = stock{ level: unknown(), };
+def f = flow{
+    s: new s,
+    tick: func{
+        stay();
+    },
+};
+run init { inst = new f; } { inst.tick; }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'state-builtin-in-fspec');
+        assert.ok(diags.length > 0, 'Should detect stay() in .fspec');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should detect unfalsifiable-assertion', () => {
+        const content = `spec TestSpec;
+def b = stock{ tokens: unknown(), };
+assume b.tokens >= 0;
+assert b.tokens >= 0 always;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'unfalsifiable-assertion');
+        assert.ok(diags.length > 0, 'Should detect unfalsifiable assertion');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Warning);
+    });
+
+    test('Should not flag assert when expression differs from assume', () => {
+        const content = `spec TestSpec;
+def b = stock{ tokens: unknown(), };
+assume b.tokens >= 0;
+assert b.tokens <= 100 always;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'unfalsifiable-assertion');
+        assert.strictEqual(diags.length, 0, 'Should not flag assert with different expression from assume');
+    });
+
+    test('Should detect invalid-identifier with underscore', () => {
+        const content = `spec TestSpec;
+def my_stock = stock{ level: unknown(), };
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'invalid-identifier');
+        assert.ok(diags.length > 0, 'Should detect identifier with underscore');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag valid camelCase identifier', () => {
+        const content = `spec TestSpec;
+def myStock = stock{ level: unknown(), };
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'invalid-identifier');
+        assert.strictEqual(diags.length, 0, 'Should not flag valid camelCase identifier');
+    });
+
+    test('Should detect flow-scalar-property', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def badFlow = flow{
+    bucket: new bucket,
+    rate: 3,
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'flow-scalar-property');
+        assert.ok(diags.length > 0, 'Should detect scalar value in flow property');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag valid flow properties', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def goodFlow = flow{
+    bucket: new bucket,
+    fill: func{ bucket.tokens <- 1; },
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'flow-scalar-property');
+        assert.strictEqual(diags.length, 0, 'Should not flag valid flow properties');
+    });
+
+    test('Should detect directional-operator-expression-rhs', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def badFlow = flow{
+    bucket: new bucket,
+    drain: func{
+        bucket.tokens -> bucket.tokens - 1;
+    },
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'directional-operator-expression-rhs');
+        assert.ok(diags.length > 0, 'Should detect arithmetic RHS in directional operator');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag plain delta in directional operator', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def goodFlow = flow{
+    bucket: new bucket,
+    drain: func{
+        bucket.tokens -> 1;
+    },
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'directional-operator-expression-rhs');
+        assert.strictEqual(diags.length, 0, 'Should not flag plain delta');
+    });
+
+    test('Should detect missing-run-block in .fspec', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+assert bucket.tokens >= 0 always;`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-run-block');
+        assert.ok(diags.length > 0, 'Should detect missing run block in .fspec');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Warning);
+    });
+
+    test('Should not flag missing-run-block when run block exists', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-run-block');
+        assert.strictEqual(diags.length, 0, 'Should not flag when run block is present');
+    });
+
+    test('Should detect choose-misuse with single option', () => {
+        const content = `system TestSystem;
+component valve = states{
+    open: func{
+        choose advance(this.closed);
+    },
+    closed: func{ stay(); },
+};
+run { valve.open; }`;
+        const document = createMockDocument(content, '/test/TestSystem.fsystem');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'choose-misuse');
+        assert.ok(diags.length > 0, 'Should detect choose with single option');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should not flag valid choose', () => {
+        const content = `system TestSystem;
+component valve = states{
+    open: func{
+        choose advance(this.closed) || stay();
+    },
+    closed: func{ stay(); },
+};
+run { valve.open; }`;
+        const document = createMockDocument(content, '/test/TestSystem.fsystem');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'choose-misuse');
+        assert.strictEqual(diags.length, 0, 'Should not flag valid choose with ||');
+    });
+
+    test('Should detect empty-func-body single-line', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def f = flow{ bucket: new bucket, fill: func{}, };
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'empty-func-body');
+        assert.ok(diags.length > 0, 'Should detect empty func{} body');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Warning);
+    });
+
+    // ── missing-comma tests ────────────────────────────────────────────────
+
+    test('Should detect missing comma in stock property', () => {
+        const content = `spec TestSpec;
+def bucket = stock{
+    tokens: unknown()
+    capacity: 100,
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-comma');
+        assert.ok(diags.length > 0, 'Should detect missing comma after stock property');
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+    });
+
+    test('Should detect missing comma in flow stock ref', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def f = flow{
+    bucket: new bucket
+    fill: func{ bucket.tokens <- 1; },
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-comma');
+        assert.ok(diags.length > 0, 'Should detect missing comma after flow stock ref');
+    });
+
+    test('Should not flag missing-comma when commas are present', () => {
+        const content = `spec TestSpec;
+def bucket = stock{
+    tokens: unknown(),
+    capacity: 100,
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-comma');
+        assert.strictEqual(diags.length, 0, 'Should not flag when commas are present');
+    });
+
+    test('Should not flag closing brace of stock/flow block for missing-comma', () => {
+        const content = `spec TestSpec;
+def bucket = stock{
+    tokens: unknown(),
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'missing-comma');
+        assert.strictEqual(diags.length, 0, 'Should not flag closing }; of block');
+    });
+});
+
+// ── Code action tests ──────────────────────────────────────────────────────
+
+suite('Code Action Test Suite', () => {
+    let linter: FaultLinter;
+    let provider: FaultCodeActionProvider;
+
+    setup(() => {
+        linter = new FaultLinter();
+        provider = new FaultCodeActionProvider();
+    });
+
+    function getActions(document: vscode.TextDocument, diagnosticCode: string) {
+        const diagnostics = linter.lint(document).filter(d => d.code === diagnosticCode);
+        if (diagnostics.length === 0) { return []; }
+        const range = diagnostics[0].range;
+        return provider.provideCodeActions(document, range, {
+            diagnostics,
+            only: undefined,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke
+        });
+    }
+
+    test('Should provide fix for missing-semicolon', () => {
+        const content = `spec TestSpec;
+const MAX = 3`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const actions = getActions(document, 'missing-semicolon');
+        assert.ok(actions.length > 0, 'Should provide a quick fix');
+        assert.ok(actions[0].edit, 'Action should have an edit');
+        assert.strictEqual(actions[0].isPreferred, true);
+    });
+
+    test('Should provide fix for missing-comma', () => {
+        const content = `spec TestSpec;
+def bucket = stock{
+    tokens: unknown()
+    capacity: 100,
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const actions = getActions(document, 'missing-comma');
+        assert.ok(actions.length > 0, 'Should provide a quick fix for missing comma');
+        assert.ok(actions[0].edit, 'Action should have an edit');
+    });
+
+    test('Should provide two fixes for when-then-temporal', () => {
+        const content = `spec TestSpec;
+def b = stock{ tokens: unknown(), };
+assert when b.tokens < 0 then b.tokens >= 0 always;
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const actions = getActions(document, 'when-then-temporal');
+        assert.strictEqual(actions.length, 2, 'Should provide two alternatives');
+        // First: remove temporal qualifier
+        assert.ok(actions[0].title.includes('Remove'), 'First action removes temporal qualifier');
+        // Second: rewrite as boolean
+        assert.ok(actions[1].title.includes('Rewrite'), 'Second action rewrites as boolean');
+    });
+
+    test('Should provide fix for const-group-syntax', () => {
+        const content = `spec TestSpec;
+const (
+    MAXA = 100;
+    RATEB = 3;
+)
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const actions = getActions(document, 'const-group-syntax');
+        assert.ok(actions.length > 0, 'Should provide a quick fix for const group');
+        assert.ok(actions[0].title.includes('Split'), 'Should offer to split into individual consts');
+    });
+
+    test('Should provide fix for invalid-identifier', () => {
+        const content = `spec TestSpec;
+def my_stock = stock{ level: unknown(), };
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const actions = getActions(document, 'invalid-identifier');
+        assert.ok(actions.length > 0, 'Should provide a rename fix');
+        assert.ok(actions[0].title.includes('myStock'), 'Should suggest camelCase name');
     });
 });
 
