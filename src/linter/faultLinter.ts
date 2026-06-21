@@ -18,7 +18,7 @@ export class FaultLinter {
             severity: vscode.DiagnosticSeverity.Error,
             pattern: /.+/,  // Match any non-empty line
             validate: (match, line, lineNumber) => {
-                const trimmed = line.trim();
+                const trimmed = stripInlineComment(line).trim();
 
                 // Skip empty lines and comments
                 if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
@@ -53,7 +53,7 @@ export class FaultLinter {
                 }
 
                 // 3. import "..." - MUST have semicolon (but not if it ends with {})
-                if (/^\s*import\s+/.test(trimmed) && !trimmed.endsWith(')')) {
+                if (/^\s*import\s+/.test(trimmed) && !trimmed.endsWith(')') && !trimmed.endsWith('(')) {
                     return true;
                 }
 
@@ -323,12 +323,17 @@ export class FaultLinter {
             pattern: /\b[a-zA-Z][a-zA-Z0-9]*[_\-][a-zA-Z0-9_\-]*\b/,
             validate: (match, line) => {
                 const trimmed = line.trim();
-                // Skip comments and string literals
+                // Skip full-line comments
                 if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
                     return false;
                 }
-                // Skip if the match is inside a string
                 const matchIdx = line.indexOf(match[0]);
+                // Skip if the match falls inside an inline comment
+                const stripped = stripInlineComment(line);
+                if (matchIdx >= stripped.length) {
+                    return false;
+                }
+                // Skip if the match is inside a string
                 const before = line.substring(0, matchIdx);
                 const quoteCount = (before.match(/"/g) || []).length;
                 return quoteCount % 2 === 0; // not inside a string
@@ -639,7 +644,7 @@ export class FaultLinter {
 
     private checkDirectionalOperatorRHS(document: vscode.TextDocument, diagnostics: vscode.Diagnostic[]): void {
         if (!ConfigManager.shouldRunRule('directional-operator-expression-rhs')) { return; }
-        const severity = ConfigManager.severityFromConfig('directional-operator-expression-rhs') ?? vscode.DiagnosticSeverity.Error;
+        const severity = ConfigManager.severityFromConfig('directional-operator-expression-rhs') ?? vscode.DiagnosticSeverity.Warning;
         const text = document.getText();
         const lines = text.split('\n');
 
@@ -653,27 +658,34 @@ export class FaultLinter {
             const lhs = dirMatch[1];
             const rhs = dirMatch[3];
 
-            // Allow simple literals: number (optionally negative), identifier, constant ref
-            // Flag if RHS contains arithmetic operators beyond a leading unary minus
-            const rhsStripped = rhs.replace(/^-/, ''); // allow unary minus
-            if (/[+\-*\/]/.test(rhsStripped)) {
+            // Strip prior-round index expressions like [now-1] or [0] before checking
+            // for arithmetic — those are valid Fault syntax for accessing prior-round values
+            const rhsNoIndex = rhs.replace(/\[[^\]]*\]/g, '');
+            const rhsNoUnary = rhsNoIndex.replace(/^-/, ''); // allow leading unary minus
+
+            // Flag if arithmetic operators appear outside index brackets
+            if (/[+\-*\/]/.test(rhsNoUnary)) {
                 const startChar = line.indexOf(dirMatch[0]);
                 diagnostics.push(this.createDiagnostic(
                     document, lineNumber, startChar, dirMatch[0].length,
-                    `The RHS of "${dirMatch[2]}" must be a plain delta value, not an arithmetic expression. Use "${lhs} ${dirMatch[2]} amount;" where amount is a literal or constant.`,
+                    `The RHS of "${dirMatch[2]}" looks like an arithmetic expression. Consider using a plain delta: "${lhs} ${dirMatch[2]} amount;"`,
                     severity, 'directional-operator-expression-rhs'
                 ));
                 return;
             }
-            // Flag if RHS references the same base identifier as LHS
-            const lhsBase = lhs.split('.')[0];
-            if (new RegExp(`\\b${lhsBase}\\b`).test(rhs)) {
-                const startChar = line.indexOf(dirMatch[0]);
-                diagnostics.push(this.createDiagnostic(
-                    document, lineNumber, startChar, dirMatch[0].length,
-                    `The RHS of "${dirMatch[2]}" must be a plain delta, not an expression referencing the target. Use "${lhs} ${dirMatch[2]} amount;" instead.`,
-                    severity, 'directional-operator-expression-rhs'
-                ));
+            // Flag bare self-reference only when no index notation was used
+            // (e.g. `tokens -> tokens` with no [idx] is likely a mistake;
+            //  `place.value <- place.value[now-1]` is valid prior-round syntax)
+            if (!rhs.includes('[')) {
+                const lhsBase = lhs.split('.')[0];
+                if (new RegExp(`\\b${lhsBase}\\b`).test(rhs)) {
+                    const startChar = line.indexOf(dirMatch[0]);
+                    diagnostics.push(this.createDiagnostic(
+                        document, lineNumber, startChar, dirMatch[0].length,
+                        `The RHS of "${dirMatch[2]}" references the target directly. Use a plain delta amount instead.`,
+                        severity, 'directional-operator-expression-rhs'
+                    ));
+                }
             }
         });
     }
@@ -756,17 +768,16 @@ export class FaultLinter {
             const trimmed = line.trim();
             if (trimmed.startsWith('//') || trimmed.startsWith('/*')) { return; }
 
-            const newMatches = [...trimmed.matchAll(/\bnew\s+([a-zA-Z][a-zA-Z0-9]*)\b/g)];
+            // Match `new TypeName` or `new alias.TypeName` — capture both forms
+            const newMatches = [...trimmed.matchAll(/\bnew\s+([a-zA-Z][a-zA-Z0-9]*)(\.[a-zA-Z][a-zA-Z0-9]*)?\b/g)];
             newMatches.forEach(typeMatch => {
                 const typeName = typeMatch[1];
+                const qualifiedPart = typeMatch[2]; // present if "new alias.Type"
                 const token = typeMatch[0];
-                // In .fsystem, alias.Type qualified names are valid — check for qualified form in context
-                if (basename.endsWith('.fsystem')) {
-                    // If the preceding character in the line is '.', this is a qualified type
-                    const tokenIdx = line.indexOf(token);
-                    const beforeToken = line.substring(0, tokenIdx).trimEnd();
-                    if (beforeToken.endsWith('.')) { return; }
-                }
+
+                // Qualified form (new alias.Type) is always valid — alias is an import, not a local def
+                if (qualifiedPart) { return; }
+
                 if (!declaredTypes.has(typeName)) {
                     const startChar = line.indexOf(token);
                     diagnostics.push(this.createDiagnostic(
@@ -844,8 +855,9 @@ export class FaultLinter {
         let blockDepth = 0;
 
         lines.forEach((line, lineNumber) => {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) { return; }
+            const raw = line.trim();
+            if (raw.startsWith('//') || raw.startsWith('/*') || raw.startsWith('*')) { return; }
+            const trimmed = stripInlineComment(line).trim();
 
             if (!inBlock) {
                 // Detect opening of a stock or flow block
@@ -856,7 +868,7 @@ export class FaultLinter {
                 return;
             }
 
-            // Track brace depth changes on this line
+            // Track brace depth changes on this line (use stripped version to avoid counting braces in comments)
             const depthBefore = blockDepth;
             for (const ch of trimmed) {
                 if (ch === '{') { blockDepth++; }
@@ -943,4 +955,23 @@ export class FaultLinter {
     public getRules(): LintRule[] {
         return [...this.rules];
     }
+}
+
+// Strip a trailing inline comment from a line, respecting string literals.
+// e.g. `level: 5, // out of 100%` → `level: 5,`
+function stripInlineComment(line: string): string {
+    let inString = false;
+    let stringChar = '';
+    for (let i = 0; i < line.length - 1; i++) {
+        const ch = line[i];
+        if (!inString && (ch === '"' || ch === "'")) {
+            inString = true;
+            stringChar = ch;
+        } else if (inString && ch === stringChar && line[i - 1] !== '\\') {
+            inString = false;
+        } else if (!inString && ch === '/' && line[i + 1] === '/') {
+            return line.slice(0, i).trimEnd();
+        }
+    }
+    return line;
 }

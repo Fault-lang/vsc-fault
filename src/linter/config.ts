@@ -47,7 +47,7 @@ export class ConfigManager {
                 'wrong-file-type-def': config.get('rules.wrong-file-type-def', 'error'),
                 'const-reassignment': config.get('rules.const-reassignment', 'error'),
                 'flow-scalar-property': config.get('rules.flow-scalar-property', 'error'),
-                'directional-operator-expression-rhs': config.get('rules.directional-operator-expression-rhs', 'error'),
+                'directional-operator-expression-rhs': config.get('rules.directional-operator-expression-rhs', 'warning'),
                 'state-builtin-in-fspec': config.get('rules.state-builtin-in-fspec', 'error'),
                 'unfalsifiable-assertion': config.get('rules.unfalsifiable-assertion', 'warning'),
                 'invalid-identifier': config.get('rules.invalid-identifier', 'error'),

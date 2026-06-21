@@ -539,7 +539,40 @@ run { }`;
         const diagnostics = linter.lint(document);
         const diags = diagnostics.filter(d => d.code === 'directional-operator-expression-rhs');
         assert.ok(diags.length > 0, 'Should detect arithmetic RHS in directional operator');
-        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Error);
+        assert.strictEqual(diags[0].severity, vscode.DiagnosticSeverity.Warning);
+    });
+
+    test('Should not flag qualified new alias.Type in init block', () => {
+        const content = `spec TestSpec;
+def bucket = stock{ tokens: unknown(), };
+def fillFlow = flow{ bucket: new bucket, fill: func{ bucket.tokens <- 1; }, };
+
+run init {
+    f = new policy.fedBillOps;
+    g = new policy.fedBillVoteOps;
+} {
+    f.fill;
+}`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'undeclared-stock-type');
+        assert.strictEqual(diags.length, 0, 'Should not flag qualified alias.Type references');
+    });
+
+    test('Should not flag prior-round index as directional-operator error', () => {
+        const content = `spec TestSpec;
+def place = stock{ value: unknown(), };
+def f = flow{
+    place: new place,
+    update: func{
+        place.value <- place.value[now-1];
+    },
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const diags = diagnostics.filter(d => d.code === 'directional-operator-expression-rhs');
+        assert.strictEqual(diags.length, 0, 'Should not flag prior-round index syntax');
     });
 
     test('Should not flag plain delta in directional operator', () => {
@@ -663,6 +696,21 @@ run { }`;
         const diagnostics = linter.lint(document);
         const diags = diagnostics.filter(d => d.code === 'missing-comma');
         assert.strictEqual(diags.length, 0, 'Should not flag when commas are present');
+    });
+
+    test('Should not flag property lines with inline comments', () => {
+        const content = `spec TestSpec;
+def bucket = stock{
+    tokens: unknown(), // solver-controlled
+    capacity: 100, // max capacity
+};
+run { }`;
+        const document = createMockDocument(content, '/test/TestSpec.fspec');
+        const diagnostics = linter.lint(document);
+        const commaDiags = diagnostics.filter(d => d.code === 'missing-comma');
+        const semiDiags = diagnostics.filter(d => d.code === 'missing-semicolon');
+        assert.strictEqual(commaDiags.length, 0, 'Should not flag property with inline comment as missing comma');
+        assert.strictEqual(semiDiags.length, 0, 'Should not flag line with inline comment as missing semicolon');
     });
 
     test('Should not flag closing brace of stock/flow block for missing-comma', () => {

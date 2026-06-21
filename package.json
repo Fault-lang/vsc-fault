@@ -93,8 +93,8 @@
           "description": "Scalar value in flow property (causes compiler panic)"
         },
         "fault-linter.rules.directional-operator-expression-rhs": {
-          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
-          "description": "RHS of <- or -> must be a plain delta, not an arithmetic expression"
+          "type": "string", "enum": ["error", "warning", "info", "off"], "default": "warning",
+          "description": "RHS of <- or -> should be a plain delta; arithmetic expressions are valid but not recommended"
         },
         "fault-linter.rules.state-builtin-in-fspec": {
           "type": "string", "enum": ["error", "warning", "info", "off"], "default": "error",
